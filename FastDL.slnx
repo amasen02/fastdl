@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FastDL/FastDL.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FastDL.Tests/FastDL.Tests.csproj" />
+  </Folder>
+</Solution>
