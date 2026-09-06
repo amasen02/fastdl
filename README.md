@@ -1,7 +1,6 @@
 # FastDL (`fdl`) — super-speed segmented downloader
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/amasen02/fastdl/badge)](https://securityscorecards.dev/viewer/?uri=github.com/amasen02/fastdl)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10332/badge)](https://www.bestpractices.dev/en)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg)](.github/SECURITY.md)
 
 
@@ -104,7 +103,8 @@ fdl -i links.txt -o ./out --zip bundle.zip
 | `--zip <name.zip>` | Pack all downloaded files into one archive. |
 | `--no-resume` | Ignore existing partial data and restart. |
 | `--header "K: V"` | Add a request header (repeatable) — auth tokens, cookies. |
-| `--user <user:pass>` | HTTP Basic auth. Also via `https://user:pass@host/…` or `FDL_PASSWORD`. |
+| `--user <user:pass>` | HTTP Basic auth applied to **every** host in the run (also via `FDL_PASSWORD`). |
+| `https://user:pass@host/…` | Inline credentials, scoped to that host only — never sent to the other URLs in the run. |
 | `--insecure` | Skip TLS certificate validation. |
 | `--retries <n>` | Per-segment retry attempts (default 5). |
 | `-q / -v` | Quiet / verbose. |

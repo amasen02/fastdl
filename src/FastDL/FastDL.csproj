@@ -15,4 +15,8 @@
     <TieredPGO>true</TieredPGO>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="FastDL.Tests" />
+  </ItemGroup>
+
 </Project>

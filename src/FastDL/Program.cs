@@ -117,6 +117,15 @@ public static class Program
             foreach (CrawlItem item in items)
             {
                 string outputPath = Path.Combine(root, item.RelativePath);
+
+                // The crawler already refuses traversing links; this is the last gate before a
+                // remote-supplied name decides where bytes land, so re-check it independently.
+                if (!PathGuard.IsInside(root, outputPath))
+                {
+                    progress.Log($"fdl: skipping '{item.Url}' — its path escapes the output directory.");
+                    continue;
+                }
+
                 if (seen.Add(outputPath))
                     specs.Add(new DownloadSpec(new[] { item.Url }, outputPath));
             }
@@ -199,17 +208,27 @@ public static class Program
     /// <summary>When only a username was supplied, resolve the password from FDL_PASSWORD or a hidden prompt.</summary>
     private static void ResolveCredentialPassword(DownloadOptions options)
     {
-        if (string.IsNullOrEmpty(options.Credentials) || options.Credentials.Contains(':')) return;
+        if (!string.IsNullOrEmpty(options.Credentials) && !options.Credentials.Contains(':'))
+            options.Credentials = WithPassword(options.Credentials, origin: null);
 
-        string user = options.Credentials;
+        foreach (string origin in options.OriginCredentials.Keys.ToList())
+        {
+            string credentials = options.OriginCredentials[origin];
+            if (!credentials.Contains(':'))
+                options.OriginCredentials[origin] = WithPassword(credentials, origin);
+        }
+    }
+
+    private static string WithPassword(string user, string? origin)
+    {
         string? password = Environment.GetEnvironmentVariable("FDL_PASSWORD");
         if (string.IsNullOrEmpty(password))
         {
             if (Console.IsInputRedirected)
                 throw new ArgumentException("password required: use --user user:pass or set FDL_PASSWORD");
-            password = ReadHidden($"Password for {user}: ");
+            password = ReadHidden(origin is null ? $"Password for {user}: " : $"Password for {user} at {origin}: ");
         }
-        options.Credentials = $"{user}:{password}";
+        return $"{user}:{password}";
     }
 
     private static string ReadHidden(string prompt)
@@ -232,18 +251,20 @@ public static class Program
         return builder.ToString();
     }
 
-    /// <summary>Extracts inline userinfo (https://user:pass@host) into Basic credentials and strips it from the URL.</summary>
-    private static void ApplyUrlCredentials(DownloadOptions options)
+    /// <summary>
+    /// Extracts inline userinfo (https://user:pass@host) into Basic credentials and strips it
+    /// from the URL. Each credential is filed under the origin it was typed for, so a password
+    /// meant for one host is never offered to the other URLs in the same run.
+    /// </summary>
+    internal static void ApplyUrlCredentials(DownloadOptions options)
     {
-        if (!string.IsNullOrEmpty(options.Credentials)) return;
         for (int i = 0; i < options.Urls.Count; i++)
         {
-            if (Uri.TryCreate(options.Urls[i], UriKind.Absolute, out Uri? uri) && !string.IsNullOrEmpty(uri.UserInfo))
-            {
-                options.Credentials = Uri.UnescapeDataString(uri.UserInfo);
-                options.Urls[i] = new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty }.Uri.AbsoluteUri;
-                return;
-            }
+            if (!Uri.TryCreate(options.Urls[i], UriKind.Absolute, out Uri? uri) || string.IsNullOrEmpty(uri.UserInfo))
+                continue;
+
+            options.OriginCredentials[HttpClientProvider.OriginOf(uri)] = Uri.UnescapeDataString(uri.UserInfo);
+            options.Urls[i] = new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty }.Uri.AbsoluteUri;
         }
     }
 

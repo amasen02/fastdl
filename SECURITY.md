@@ -9,9 +9,9 @@ notes below document the few areas worth understanding.
 | Area | Behaviour |
 |---|---|
 | TLS | Certificates are validated by default. `--insecure` disables validation for a run — use it only against hosts you trust; it exposes the transfer to man-in-the-middle tampering. |
-| Credentials | HTTP Basic auth is accepted via `--user user:pass`, the `FDL_PASSWORD` environment variable, or inline `https://user:pass@host/…`. Inline userinfo is moved into an `Authorization` header and **stripped from the URL** so it is not written into logs or resume metadata. |
+| Credentials | HTTP Basic auth is accepted via `--user user:pass`, the `FDL_PASSWORD` environment variable, or inline `https://user:pass@host/…`. Inline userinfo is moved into an `Authorization` header and **stripped from the URL** so it is not written into logs or resume metadata, and it is **scoped to the origin it was typed for** (scheme + host + port) — it is never sent to another host in the same run, including other positional URLs, `-i` list entries and `--mirror` sources. `--user` and `FDL_PASSWORD` are deliberately **run-wide**: they apply to every host you pass in that invocation, so use inline userinfo when a password belongs to only one of them. |
 | Resume sidecar | The `.fdlmeta` file stores only a chunk-completion bitmap and resource identity (size, ETag, Last-Modified) — never credentials or response bodies. |
-| Path handling | Crawled and Content-Disposition file names are sanitised (invalid characters replaced) and folder crawls are confined to the requested root. |
+| Path handling | Remote input names files; it never chooses directories. Crawled and `Content-Disposition` file names are sanitised (invalid characters replaced, `.`/`..` rejected), links are checked for containment **after** percent-decoding — so `href="..%2f..%2fevil.iso"` is dropped rather than written above the output directory — and every resolved path is re-checked against the output root before any bytes are fetched. |
 | Telemetry | None. FastDL makes no network calls other than the downloads you request. |
 | Decompression | Transfer compression is disabled (`Accept-Encoding: identity`) so byte-range math stays correct; no archive is auto-expanded unless you pass `--extract`. |
 

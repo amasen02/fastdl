@@ -140,7 +140,8 @@ public static class CommandLine
               --zip <name.zip>    Pack all downloaded files into a single zip archive.
               --no-resume         Ignore existing partial data and restart.
               --header "K: V"     Add a request header (repeatable). Useful for auth/cookies.
-              --user <user:pass>  HTTP Basic auth (e.g. password-protected seedboxes). Also via https://user:pass@host/…
+              --user <user:pass>  HTTP Basic auth for EVERY host in this run (e.g. password-protected seedboxes).
+                                  Prefer https://user:pass@host/… to scope a password to that one host.
               --insecure          Skip TLS certificate validation.
               --retries <n>       Per-segment retry attempts (default 5).
           -q, --quiet             Minimal output.

@@ -17,7 +17,15 @@ public sealed class DownloadOptions
     public bool NoResume { get; set; }
     public bool Insecure { get; set; }
     public List<(string Key, string Value)> Headers { get; } = new();
-    public string? Credentials { get; set; } // HTTP Basic, "user:pass"
+    /// <summary>HTTP Basic ("user:pass") from <c>--user</c>/<c>FDL_PASSWORD</c>: deliberately run-wide.</summary>
+    public string? Credentials { get; set; }
+
+    /// <summary>
+    /// HTTP Basic credentials parsed from inline userinfo, keyed by the origin they were typed
+    /// for (see <see cref="HttpClientProvider.OriginOf"/>). A credential the user scoped to one
+    /// host by typing it in that host's URL is only ever sent back to that host.
+    /// </summary>
+    public Dictionary<string, string> OriginCredentials { get; } = new(StringComparer.OrdinalIgnoreCase);
     public string[]? Mirrors { get; set; }
     public int Retries { get; set; } = 5;
     public bool Quiet { get; set; }

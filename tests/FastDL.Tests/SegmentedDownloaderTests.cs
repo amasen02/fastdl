@@ -134,4 +134,25 @@ public sealed class SegmentedDownloaderTests : IAsyncLifetime
         Assert.Equal(Sha256Hex(content), Sha256Hex(File.ReadAllBytes(path)));
         Assert.Equal(3, handler.SegmentRequests); // only the 3 missing chunks were fetched
     }
+
+    // The server names the file; it must not get to choose the directory too.
+    [Theory]
+    [InlineData("attachment; filename=\"../../evil.bin\"")]
+    [InlineData("attachment; filename=\"..\"")]
+    [InlineData("attachment; filename*=UTF-8''%2e%2e%2f%2e%2e%2fevil.bin")]
+    [InlineData("attachment; filename*=UTF-8''%2e%2e")]
+    public async Task Content_disposition_cannot_place_the_file_outside_the_output_directory(string disposition)
+    {
+        byte[] content = DeterministicBytes(4096);
+        using var http = new HttpClient(new RangeHttpHandler(content, supportsRanges: false, contentDisposition: disposition));
+        var downloader = new SegmentedDownloader(http, Options(), _progress);
+        string outputDirectory = _dir + Path.DirectorySeparatorChar;
+
+        DownloadResult result = await downloader.DownloadAsync(
+            new[] { new Uri("https://h/f.bin") }, outputDirectory, CancellationToken.None);
+
+        Assert.True(result.Success, result.Error);
+        Assert.True(PathGuard.IsInside(_dir, result.OutputPath), $"wrote outside the output directory: {result.OutputPath}");
+        Assert.Equal(Sha256Hex(content), Sha256Hex(File.ReadAllBytes(result.OutputPath)));
+    }
 }

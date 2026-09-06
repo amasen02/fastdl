@@ -59,9 +59,12 @@ public sealed partial class IndexCrawler
             if (!Uri.TryCreate(current, href, out Uri? resolved)) continue;
             resolved = StripQueryAndFragment(resolved);
 
-            // Stay strictly within the crawl root.
+            // Stay strictly within the crawl root. The URI form is checked first, then the
+            // *decoded* form: percent-encoded separators survive URI resolution untouched, so
+            // a link may sit under the root as a URI and still escape it as a file path.
             if (!resolved.AbsoluteUri.StartsWith(root.AbsoluteUri, StringComparison.OrdinalIgnoreCase)) continue;
             if (resolved.AbsoluteUri.Equals(current.AbsoluteUri, StringComparison.OrdinalIgnoreCase)) continue;
+            if (EscapesRootWhenDecoded(root, resolved)) continue;
 
             bool isDirectory = resolved.AbsoluteUri.EndsWith('/');
             if (isDirectory)
@@ -75,7 +78,8 @@ public sealed partial class IndexCrawler
             if (!MatchesExtensionFilter(resolved)) continue;
             if (!seenFiles.Add(resolved.AbsoluteUri)) continue;
 
-            string relative = ToRelativePath(root, resolved);
+            string? relative = ToRelativePath(root, resolved);
+            if (relative is null) continue;
             files.Add(new CrawlItem(resolved, relative));
         }
     }
@@ -96,19 +100,50 @@ public sealed partial class IndexCrawler
         || href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase)
         || href.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// True when percent-decoding the link introduces path structure the URI-level root check
+    /// could not see. <c>Uri</c> never unescapes <c>%2f</c> and never collapses dot segments
+    /// hidden behind it, so <c>href="..%2f..%2fevil.iso"</c> resolves to a single URI segment
+    /// under the root while decoding to <c>../../evil.iso</c> — an escape from the output tree.
+    /// </summary>
+    private static bool EscapesRootWhenDecoded(Uri root, Uri resolved)
+    {
+        string encoded = resolved.AbsoluteUri[root.AbsoluteUri.Length..];
+        string decoded = Uri.UnescapeDataString(encoded);
+        if (string.Equals(encoded, decoded, StringComparison.Ordinal)) return false;
+
+        // A separator that only exists after decoding was smuggled in, and any dot segment in
+        // the decoded path navigates out of the tree. Either one disqualifies the link.
+        if (decoded.Count(c => c is '/' or '\\') != encoded.Count(c => c is '/' or '\\')) return true;
+        return decoded.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(PathGuard.IsDotSegment);
+    }
+
     private static Uri StripQueryAndFragment(Uri url)
         => new UriBuilder(url) { Query = string.Empty, Fragment = string.Empty }.Uri;
 
     private static Uri EnsureTrailingSlash(Uri url)
         => url.AbsoluteUri.EndsWith('/') ? url : new Uri(url.AbsoluteUri + "/");
 
-    private static string ToRelativePath(Uri root, Uri file)
+    /// <summary>
+    /// Maps a crawled URL to a path relative to the output root. Returns <c>null</c> when the
+    /// link cannot be expressed as a name inside the tree, so the caller drops it rather than
+    /// writing somewhere the user did not ask for.
+    /// </summary>
+    private static string? ToRelativePath(Uri root, Uri file)
     {
         string relative = Uri.UnescapeDataString(file.AbsoluteUri[root.AbsoluteUri.Length..]);
         string[] segments = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0) return null;
+
         for (int i = 0; i < segments.Length; i++)
+        {
             foreach (char invalid in Path.GetInvalidFileNameChars())
                 segments[i] = segments[i].Replace(invalid, '_');
+
+            // Path.GetInvalidFileNameChars() contains no '.', so a "." or ".." segment survives
+            // sanitising intact and would traverse out of the output root once combined.
+            if (PathGuard.IsDotSegment(segments[i])) return null;
+        }
         return Path.Combine(segments);
     }
 }

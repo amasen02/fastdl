@@ -13,13 +13,15 @@ internal sealed class RangeHttpHandler : HttpMessageHandler
 {
     private readonly byte[] _content;
     private readonly bool _supportsRanges;
+    private readonly string? _contentDisposition;
     private int _requestCount;
     private int _segmentRequests;
 
-    public RangeHttpHandler(byte[] content, bool supportsRanges = true)
+    public RangeHttpHandler(byte[] content, bool supportsRanges = true, string? contentDisposition = null)
     {
         _content = content;
         _supportsRanges = supportsRanges;
+        _contentDisposition = contentDisposition;
     }
 
     public int RequestCount => Volatile.Read(ref _requestCount);
@@ -45,12 +47,21 @@ internal sealed class RangeHttpHandler : HttpMessageHandler
             var partial = new HttpResponseMessage(HttpStatusCode.PartialContent) { Content = new ByteArrayContent(slice) };
             partial.Content.Headers.ContentRange = new ContentRangeHeaderValue(from, to, total);
             partial.Content.Headers.ContentLength = length;
+            AddContentDisposition(partial);
             return Task.FromResult(partial);
         }
 
         var full = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(_content) };
         full.Content.Headers.ContentLength = total;
+        AddContentDisposition(full);
         return Task.FromResult(full);
+    }
+
+    /// <summary>Added unvalidated so hostile file names (traversal attempts) reach the parser intact.</summary>
+    private void AddContentDisposition(HttpResponseMessage response)
+    {
+        if (_contentDisposition is not null)
+            response.Content.Headers.TryAddWithoutValidation("Content-Disposition", _contentDisposition);
     }
 }
 

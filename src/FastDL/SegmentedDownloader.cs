@@ -380,7 +380,12 @@ public sealed class SegmentedDownloader
         bool isDirectory = Directory.Exists(outputPath)
             || outputPath.EndsWith(Path.DirectorySeparatorChar)
             || outputPath.EndsWith(Path.AltDirectorySeparatorChar);
-        return isDirectory ? Path.Combine(outputPath, fileName) : outputPath;
+        if (!isDirectory) return outputPath; // user named the exact file; nothing remote to trust
+
+        string combined = Path.Combine(outputPath, fileName);
+        if (!PathGuard.IsInside(outputPath, combined))
+            throw new IOException($"refusing to write outside '{outputPath}': server-supplied name '{fileName}'");
+        return combined;
     }
 
     private static string ResolveFileName(Uri url, string? contentDisposition)
@@ -402,6 +407,9 @@ public sealed class SegmentedDownloader
     {
         foreach (char invalid in Path.GetInvalidFileNameChars())
             name = name.Replace(invalid, '_');
-        return name;
+
+        // "." and ".." pass the invalid-character filter untouched but name a directory, not a
+        // file: combining either with the output directory walks out of it.
+        return PathGuard.IsDotSegment(name) ? "download" : name;
     }
 }
